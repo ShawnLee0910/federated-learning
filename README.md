@@ -55,7 +55,10 @@ McMahan, Brendan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y 
 Shaoxiong Ji. (2018, March 30). A PyTorch Implementation of Federated Learning. Zenodo. http://doi.org/10.5281/zenodo.4321561
 
 
-#!/bin/bash
+#!/bin/bash.
+
+
+
 
 # 激活 conda 环境
 conda activate FL
