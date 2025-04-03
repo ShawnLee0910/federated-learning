@@ -55,3 +55,15 @@ McMahan, Brendan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y 
 Shaoxiong Ji. (2018, March 30). A PyTorch Implementation of Federated Learning. Zenodo. http://doi.org/10.5281/zenodo.4321561
 
 
+#!/bin/bash
+
+# 激活 conda 环境
+conda activate FL
+
+# 进入项目目录
+cd /liyuanshuai/federated-learning
+
+# 运行联邦学习脚本
+python main_fed.py --dataset mnist --num_channels 1 --model mlp --epochs 50 --gpu 0 --iid
+
+conda deactivate && conda activate FL && cd /liyuanshuai/federated-learning && python main_fed.py --dataset mnist --num_channels 1 --model mlp --epochs 50 --gpu 0
