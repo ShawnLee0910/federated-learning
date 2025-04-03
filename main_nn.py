@@ -30,17 +30,28 @@ def test(net_g, data_loader):
         correct += y_pred.eq(target.data.view_as(y_pred)).long().cpu().sum()
 
     test_loss /= len(data_loader.dataset)
+    accuracy = 100. * correct / len(data_loader.dataset)
     print('\nTest set: Average loss: {:.4f} \nAccuracy: {}/{} ({:.2f}%)\n'.format(
-        test_loss, correct, len(data_loader.dataset),
-        100. * correct / len(data_loader.dataset)))
+        test_loss, correct, len(data_loader.dataset), accuracy))
 
-    return correct, test_loss
+    return accuracy, test_loss
 
 
 if __name__ == '__main__':
     # parse args
     args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
+
+    # 打印实验配置信息
+    print('\n' + '='*50)
+    print('集中式训练实验配置:')
+    print(f'数据集: {args.dataset}')
+    print(f'训练轮数: {args.epochs}')
+    print(f'模型: {args.model}')
+    print(f'学习率: {args.lr}')
+    print(f'动量: {args.momentum}')
+    print(f'使用设备: {args.device}')
+    print('='*50 + '\n')
 
     torch.manual_seed(args.seed)
 
@@ -80,6 +91,26 @@ if __name__ == '__main__':
     train_loader = DataLoader(dataset_train, batch_size=64, shuffle=True)
 
     list_loss = []
+    train_accuracies = []
+    test_accuracies = []
+    
+    # 准备测试数据加载器
+    if args.dataset == 'mnist':
+        dataset_test = datasets.MNIST('./data/mnist/', train=False, download=True,
+                   transform=transforms.Compose([
+                       transforms.ToTensor(),
+                       transforms.Normalize((0.1307,), (0.3081,))
+                   ]))
+        test_loader = DataLoader(dataset_test, batch_size=1000, shuffle=False)
+    elif args.dataset == 'cifar':
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+        dataset_test = datasets.CIFAR10('./data/cifar', train=False, transform=transform, target_transform=None, download=True)
+        test_loader = DataLoader(dataset_test, batch_size=1000, shuffle=False)
+    else:
+        exit('Error: unrecognized dataset')
+    
     net_glob.train()
     for epoch in range(args.epochs):
         batch_loss = []
@@ -98,30 +129,31 @@ if __name__ == '__main__':
         loss_avg = sum(batch_loss)/len(batch_loss)
         print('\nTrain loss:', loss_avg)
         list_loss.append(loss_avg)
+        
+        # 计算并输出训练和测试准确率
+        net_glob.eval()
+        train_acc, _ = test(net_glob, train_loader)
+        test_acc, _ = test(net_glob, test_loader)
+        train_accuracies.append(train_acc)
+        test_accuracies.append(test_acc)
+        net_glob.train()
 
     # plot loss
     plt.figure()
     plt.plot(range(len(list_loss)), list_loss)
     plt.xlabel('epochs')
     plt.ylabel('train loss')
-    plt.savefig('./log/nn_{}_{}_{}.png'.format(args.dataset, args.model, args.epochs))
+    plt.savefig('./save/nn_{}_{}_{}.png'.format(args.dataset, args.model, args.epochs))
+    
+    # plot accuracy
+    plt.figure()
+    plt.plot(range(len(train_accuracies)), train_accuracies, label='Train Accuracy')
+    plt.plot(range(len(test_accuracies)), test_accuracies, label='Test Accuracy')
+    plt.xlabel('epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    plt.savefig('./save/accuracy_nn_{}_{}_{}.png'.format(args.dataset, args.model, args.epochs))
 
-    # testing
-    if args.dataset == 'mnist':
-        dataset_test = datasets.MNIST('./data/mnist/', train=False, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ]))
-        test_loader = DataLoader(dataset_test, batch_size=1000, shuffle=False)
-    elif args.dataset == 'cifar':
-        transform = transforms.Compose(
-            [transforms.ToTensor(),
-             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-        dataset_test = datasets.CIFAR10('./data/cifar', train=False, transform=transform, target_transform=None, download=True)
-        test_loader = DataLoader(dataset_test, batch_size=1000, shuffle=False)
-    else:
-        exit('Error: unrecognized dataset')
-
-    print('test on', len(dataset_test), 'samples')
+    # Final testing
+    print('Final test on', len(dataset_test), 'samples')
     test_acc, test_loss = test(net_glob, test_loader)

@@ -63,6 +63,41 @@ def cifar_iid(dataset, num_users):
     return dict_users
 
 
+def analyze_data_distribution(dataset, dict_users, is_iid=True):
+    """
+    分析并打印数据分布信息
+    :param dataset: 数据集
+    :param dict_users: 用户数据索引字典
+    :param is_iid: 是否为IID分布
+    """
+    print("\n数据分布分析" + ("(IID)" if is_iid else "(Non-IID)"))
+    print("-" * 40)
+    
+    # 随机选择3个客户端进行分析
+    num_users = len(dict_users)
+    sample_users = np.random.choice(range(num_users), min(3, num_users), replace=False)
+    
+    for user in sample_users:
+        user_labels = []
+        for idx in dict_users[user]:
+            # 获取样本标签
+            user_labels.append(dataset[idx][1])
+        
+        # 统计每个标签的数量
+        label_counts = {}
+        for label in user_labels:
+            if label not in label_counts:
+                label_counts[label] = 0
+            label_counts[label] += 1
+        
+        print(f"客户端 {user} 的标签分布:")
+        for label, count in sorted(label_counts.items()):
+            print(f"  标签 {label}: {count} 个样本 ({count/len(user_labels)*100:.2f}%)")
+        print("-" * 40)
+    
+    print("")
+
+
 if __name__ == '__main__':
     dataset_train = datasets.MNIST('../data/mnist/', train=True, download=True,
                                    transform=transforms.Compose([

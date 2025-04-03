@@ -10,7 +10,7 @@ import numpy as np
 from torchvision import datasets, transforms
 import torch
 
-from utils.sampling import mnist_iid, mnist_noniid, cifar_iid
+from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, analyze_data_distribution
 from utils.options import args_parser
 from models.Update import LocalUpdate
 from models.Nets import MLP, CNNMnist, CNNCifar
@@ -23,6 +23,20 @@ if __name__ == '__main__':
     args = args_parser()
     args.device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
 
+    # 打印实验配置信息
+    print('\n' + '='*50)
+    print('实验配置:')
+    print(f'数据集: {args.dataset}')
+    print(f'客户端数量: {args.num_users}')
+    print(f'训练轮数: {args.epochs}')
+    print(f'模型: {args.model}')
+    print(f'数据分布: {"IID" if args.iid else "Non-IID"}')
+    print(f'参与客户端比例: {args.frac}')
+    print(f'本地训练轮数: {args.local_ep}')
+    print(f'本地批量大小: {args.local_bs}')
+    print(f'使用设备: {args.device}')
+    print('='*50 + '\n')
+
     # load dataset and split users
     if args.dataset == 'mnist':
         trans_mnist = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
@@ -33,12 +47,16 @@ if __name__ == '__main__':
             dict_users = mnist_iid(dataset_train, args.num_users)
         else:
             dict_users = mnist_noniid(dataset_train, args.num_users)
+        # 分析数据分布
+        analyze_data_distribution(dataset_train, dict_users, args.iid)
     elif args.dataset == 'cifar':
         trans_cifar = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         dataset_train = datasets.CIFAR10('../data/cifar', train=True, download=True, transform=trans_cifar)
         dataset_test = datasets.CIFAR10('../data/cifar', train=False, download=True, transform=trans_cifar)
         if args.iid:
             dict_users = cifar_iid(dataset_train, args.num_users)
+            # 分析数据分布
+            analyze_data_distribution(dataset_train, dict_users, True)
         else:
             exit('Error: only consider IID setting in CIFAR10')
     else:
@@ -65,6 +83,8 @@ if __name__ == '__main__':
 
     # training
     loss_train = []
+    train_accuracies = []
+    test_accuracies = []
     cv_loss, cv_acc = [], []
     val_loss_pre, counter = 0, 0
     net_best = None
@@ -98,6 +118,16 @@ if __name__ == '__main__':
         loss_avg = sum(loss_locals) / len(loss_locals)
         print('Round {:3d}, Average loss {:.3f}'.format(iter, loss_avg))
         loss_train.append(loss_avg)
+        
+        # 计算并输出准确率
+        net_glob.eval()
+        acc_train, _ = test_img(net_glob, dataset_train, args)
+        acc_test, _ = test_img(net_glob, dataset_test, args)
+        print('Training accuracy: {:.2f}%'.format(acc_train))
+        print('Testing accuracy: {:.2f}%'.format(acc_test))
+        train_accuracies.append(acc_train)
+        test_accuracies.append(acc_test)
+        net_glob.train()
 
     # plot loss curve
     plt.figure()
@@ -105,10 +135,19 @@ if __name__ == '__main__':
     plt.ylabel('train_loss')
     plt.savefig('./save/fed_{}_{}_{}_C{}_iid{}.png'.format(args.dataset, args.model, args.epochs, args.frac, args.iid))
 
+    # plot accuracy curve
+    plt.figure()
+    plt.plot(range(len(train_accuracies)), train_accuracies, label='Train Accuracy')
+    plt.plot(range(len(test_accuracies)), test_accuracies, label='Test Accuracy')
+    plt.ylabel('Accuracy')
+    plt.xlabel('Round')
+    plt.legend()
+    plt.savefig('./save/accuracy_{}_{}_{}_C{}_iid{}.png'.format(args.dataset, args.model, args.epochs, args.frac, args.iid))
+
     # testing
     net_glob.eval()
     acc_train, loss_train = test_img(net_glob, dataset_train, args)
     acc_test, loss_test = test_img(net_glob, dataset_test, args)
-    print("Training accuracy: {:.2f}".format(acc_train))
-    print("Testing accuracy: {:.2f}".format(acc_test))
+    print("Final Training accuracy: {:.2f}".format(acc_train))
+    print("Final Testing accuracy: {:.2f}".format(acc_test))
 
